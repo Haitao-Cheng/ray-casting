@@ -1,0 +1,44 @@
+
+//获取射线ray的颜色，存入colour_out，最多跟踪traceNum次
+void World::getColourForRay(const Ray& ray, Colour& colour_out,int traceNum)
+{
+	if(traceNum != 0)
+	{
+		Object *obj;
+		Vec3 normal,hitpos,L,R,Ldir;
+		float dist,bf=0.5;//为了简化，这里将反射系数设为常数，其本来值与dist值有关 
+		int i;
+		static int ligsize = m_lights.size();
+		obj = closestObject(ray,dist);//返回与光线ray相交的最近的物体，并将其距离存入dist中 
+
+		if(obj)//检测光线是否与场景中的物体相交 
+		{
+			Colour lightcolour,total1,total2,diffuse = Colour::black(),specular = Colour::black();
+			hitpos = ray.m_startPos;
+			hitpos.addMult(ray.m_unitDir,dist);
+			normal = obj->getGeometry().getNormalForPos(hitpos);
+			normal.normalise();
+			R = reflect(ray.m_unitDir,normal);//求出反射光线 
+			for(i = 0;i < ligsize;i++)//求出每个光源对交点处光照的贡献 
+			{
+				L = m_lights.at(i)->getPos() - hitpos;//求出阴影光线 
+				L.normalise();
+				if(!closestObject(Ray(hitpos,L),dist))//检测阴影光线路径中是否存在遮挡物 
+				{       //不存在遮挡物则累加上该光源对交点的散射和镜面光的贡献 
+					lightcolour = m_lights.at(i)->getColour();
+					Vec3 H = (L - ray.m_unitDir)/2;
+					H.normalise();
+					diffuse += lightcolour * (L.dot(normal)>0?L.dot(normal):0);
+					specular += lightcolour * pow((H.dot(normal)>0?H.dot(normal):0),obj->getMaterial().ns);
+				}
+			}
+			total1 = ambient_lighting * obj->getMaterial().ka
+				+ diffuse * obj->getMaterial().kd + specular * obj->getMaterial().ks;
+
+			getColourForRay(Ray(hitpos,R),total2,traceNum-1);//递归计算下个交点的光照
+			colour_out = total1 + total2*bf;//累加 
+			return;
+		}	
+	}
+	colour_out = Colour::black();//其余情况返回黑色 
+}
